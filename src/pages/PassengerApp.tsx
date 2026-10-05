@@ -4,7 +4,6 @@ export default function AppPage() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null)
   const [showInstall, setShowInstall] = useState(false)
   const [step, setStep] = useState(0)
-  // NUEVO: telefono del cliente - como en v30 image_1cc44b.png
   const [telefonoCliente, setTelefonoCliente] = useState("")
 
   useEffect(() => {
@@ -26,7 +25,6 @@ export default function AppPage() {
 
   return (
     <div className="h-[100dvh] w-full bg-black text-white flex flex-col overflow-hidden relative">
-      {/* Header */}
       <div className="bg-black px-3 py-2 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
           <div className="w-9 h-9 rounded-full bg-[#0f3d2e] border-2 border-yellow-500 flex items-center justify-center font-black text-yellow-500">N</div>
@@ -44,7 +42,6 @@ export default function AppPage() {
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="bg-black px-2 py-2 grid grid-cols-5 gap-2 shrink-0">
         {[
           {label:'PERFIL', icon:'👤', active: step===0},
@@ -59,7 +56,6 @@ export default function AppPage() {
         ))}
       </div>
 
-      {/* Mapa completo */}
       <div className="flex-1 relative bg-[#c9d6de] overflow-hidden">
         <iframe
           title="mapa"
@@ -68,7 +64,6 @@ export default function AppPage() {
         />
       </div>
 
-      {/* Bottom sheet */}
       <div className="bg-white text-black rounded-t-[1.8rem] p-4 pb-6 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] z-10 max-h-[55vh] overflow-y-auto">
         <div className="w-12 h-1.5 bg-zinc-300 rounded-full mx-auto mb-4"></div>
         
@@ -88,7 +83,6 @@ export default function AppPage() {
               <button onClick={handleLogout} className="text-[10px] bg-zinc-800 px-3 py-1.5 rounded-full font-bold">Salir</button>
             </div>
 
-            {/* CAMPO NUEVO - NUMERO DEL CLIENTE - como en v30 image_1cc44b.png */}
             <div className="mt-4 rounded-[18px] border-2 border-black bg-white p-4">
               <p className="text-[10px] font-black tracking-[0.25em] text-black/50">NÚMERO DEL CLIENTE</p>
               <div className="mt-2 flex items-center gap-3">
@@ -108,28 +102,25 @@ export default function AppPage() {
             <button
               disabled={telefonoCliente.length < 10}
               onClick={() => setStep(1)}
-              className="mt-4 w-full h-[56px] rounded-2xl bg-[#FFD60A] text-black font-black text-[14px] disabled:opacity-30 disabled:cursor-not-allowed"
+              className="mt-4 w-full h-[56px] rounded-2xl bg-[#FFD60A] text-black font-black text-[14px] disabled:opacity-30"
             >
-              Continuar con cliente → {telefonoCliente.length === 10 ? '✓' : ''}
+              Continuar → {telefonoCliente.length === 10 ? '✓' : ''}
             </button>
 
             <button onClick={handleLogout} className="mt-3 w-full h-[48px] rounded-2xl bg-black text-[#FFD60A] font-bold text-[14px] border-2 border-black">
               Cerrar sesión
             </button>
-            <p className="mt-2 text-center text-[9px] text-black/30">Vuelve al intro Porsche 2.5s</p>
           </>
         )}
 
         {step !== 0 && (
           <div className="py-8 text-center">
-            <p className="font-black">Paso {step+1}: {['PERFIL','ORIGEN','DESTINO','DETALLES','PRECIO'][step]}</p>
-            <p className="text-sm text-zinc-500 mt-2">Aquí va tu flujo existente</p>
-            <button onClick={()=>setStep(0)} className="mt-4 text-sm underline">← Volver a perfil</button>
+            <p className="font-black">Paso {step+1}</p>
+            <button onClick={()=>setStep(0)} className="mt-4 text-sm underline">← Volver</button>
           </div>
         )}
       </div>
 
-      {/* Banner Instalar */}
       {showInstall && (
         <div className="bg-[#fef9e7] border-t border-yellow-200 p-3 flex items-center justify-between z-20 shrink-0">
           <div className="flex items-center gap-2">
