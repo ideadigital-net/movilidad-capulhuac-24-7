@@ -55,6 +55,11 @@ export default function Landing() {
       </div>
 
       <div className="relative z-10 w-full max-w-sm px-6 pb-8 flex flex-col gap-3">
+        {showInstall && (
+          <button onClick={instalar} className="w-full bg-zinc-900/90 border border-yellow-500/50 text-yellow-500 py-3.5 rounded-2xl font-bold text-xs animate-pulse">
+            📲 INSTALAR APP EN MI CELULAR
+          </button>
+        )}
         <Link to="/app" className="w-full bg-yellow-400 text-black py-4 rounded-2xl font-black text-sm text-center shadow-[0_0_40px_rgba(234,179,8,0.8)]">
           Comenzar viaje →
         </Link>

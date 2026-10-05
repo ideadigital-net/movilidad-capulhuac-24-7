@@ -2,6 +2,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Landing from './pages/Landing'
 import PassengerApp from './pages/PassengerApp'
+import InstallPWA from './components/InstallPWA'
 
 export default function App() {
   return (
@@ -12,6 +13,8 @@ export default function App() {
         <Route path="/home" element={<PassengerApp />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <InstallPWA />
     </BrowserRouter>
+    
   )
 }
