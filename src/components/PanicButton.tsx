@@ -3,7 +3,8 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 
 export default function PanicButton({ codigo, tipo = 'pasajero' }: { codigo?: number, tipo?: 'pasajero'|'conductor' }) {
-  const { user } = useAuth()
+  const auth = useAuth() as any
+  const user = auth?.user ?? null
   const [enviando, setEnviando] = useState(false)
   const [activa, setActiva] = useState(false)
 
