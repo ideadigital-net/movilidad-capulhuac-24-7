@@ -134,16 +134,19 @@ export default function AppPage() {
 
   const reverseGeocodeOrigen = async (lat:number,lng:number)=>{
     try{
-      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18`)
+      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&accept-language=es`)
       const j = await r.json(); const dir=j.display_name||`${lat.toFixed(5)}, ${lng.toFixed(5)}`
-      setOrigen(dir); setDireccionConfirmada(dir); hablar(`Origen confirmado`)
+      const corto = dir.split(',').slice(0,2).join(', ')
+      setOrigen(dir); setDireccionConfirmada(dir); hablar(`Origen confirmado, ${corto}`)
     }catch{ setOrigen(`${lat.toFixed(5)}, ${lng.toFixed(5)}`) }
   }
   const reverseGeocodeDestino = async (lat:number,lng:number)=>{
     try{
-      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18`)
+      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&accept-language=es`)
       const j = await r.json(); const dir=j.display_name||`${lat.toFixed(5)}, ${lng.toFixed(5)}`
-      setDestino(dir); setDireccionDestinoConfirmada(dir); guardarDestinoFrecuente(dir, lat,lng); hablar(`Destino confirmado, ${ (j.display_name||'').split(',')[0] }`)
+      const corto = dir.split(',').slice(0,2).join(', ')
+      setDestino(dir); setDireccionDestinoConfirmada(dir); guardarDestinoFrecuente(dir, lat,lng); hablar(`Destino confirmado, ${corto}`)
+      if(origenCoords) trazarRutaReal(origenCoords, {lat,lng})
     }catch{ setDestino(`${lat.toFixed(5)}, ${lng.toFixed(5)}`) }
   }
 
@@ -153,24 +156,57 @@ export default function AppPage() {
     try{
       const lower = texto.toLowerCase()
       if(tipo==='destino'){
-        const match = MUNICIPIOS_CENTRO.find(m=> lower.includes(m.nombre.toLowerCase().split(' ')[0]))
-        if(match && lower.length<20){ centrarEnMunicipioDirecto(match); setBuscandoDireccion(false); return }
+        const match = MUNICIPIOS_CENTRO.find(m=> lower.includes(m.nombre.toLowerCase().split(' ')[0].toLowerCase()))
+        if(match && lower.length<25){ centrarEnMunicipioDirecto(match); setBuscandoDireccion(false); return }
       }
-      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(texto+', Estado de México, México')}&limit=3&countrycodes=mx`
-      const r = await fetch(url); const j = await r.json()
-      if(j && j.length>0){
-        const mejor = j[0]; const lat=parseFloat(mejor.lat), lng=parseFloat(mejor.lon)
-        if(tipo==='origen'){ setOrigenCoords({lat,lng}); setDireccionConfirmada(mejor.display_name); setOrigen(mejor.display_name); leafletMap.current?.setView([lat,lng],17); markerOrigenRef.current?.setLatLng([lat,lng]) }
-        else { setDestinoCoords({lat,lng}); setDireccionDestinoConfirmada(mejor.display_name); setDestino(mejor.display_name); leafletMap.current?.setView([lat,lng],14); markerDestinoRef.current?.setLatLng([lat,lng]); guardarDestinoFrecuente(mejor.display_name,lat,lng) }
+      const viewbox = '-100.2,19.6,-99.1,18.9'
+      const queries = [
+        `${texto}, Capulhuac, Estado de Mexico, Mexico`,
+        `${texto}, Santiago Tianguistenco, Mexico`,
+        `${texto}, Estado de Mexico, Mexico`,
+        texto
+      ]
+      for(let q of queries){
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=5&countrycodes=mx&viewbox=${viewbox}&bounded=0&addressdetails=1`
+        const r = await fetch(url); const j = await r.json()
+        if(j && j.length>0){
+          // elegir el más cercano a Capulhuac dentro de 30km
+          let mejor = j[0]
+          for(let cand of j){ const d = distanciaKm(BASE_CAPULHUAC.lat, BASE_CAPULHUAC.lng, parseFloat(cand.lat), parseFloat(cand.lon)); if(d <= RADIO_KM){ mejor = cand; break } }
+          const lat=parseFloat(mejor.lat), lng=parseFloat(mejor.lon)
+          const display = mejor.display_name
+          const corto = display.split(',').slice(0,2).join(', ')
+          if(tipo==='origen'){ 
+            setOrigenCoords({lat,lng}); setDireccionConfirmada(display); setOrigen(display); 
+            leafletMap.current?.setView([lat,lng],17); markerOrigenRef.current?.setLatLng([lat,lng]); 
+            hablar(`Origen encontrado, ${corto}`)
+          }
+          else { 
+            setDestinoCoords({lat,lng}); setDireccionDestinoConfirmada(display); setDestino(display); 
+            leafletMap.current?.setView([lat,lng],16); markerDestinoRef.current?.setLatLng([lat,lng]); 
+            guardarDestinoFrecuente(display,lat,lng); hablar(`Destino encontrado, ${corto}`)
+            if(origenCoords) trazarRutaReal(origenCoords, {lat,lng})
+          }
+          setBuscandoDireccion(false); return
+        }
       }
-    }catch{ } setBuscandoDireccion(false)
+      hablar(`No encontré ${texto}, mueve el pin en el mapa`)
+    }catch(e){ console.log('Geocode error', e) } setBuscandoDireccion(false)
   }
 
   const centrarEnMunicipioDirecto = async (m:any)=>{
     const {lat,lng,nombre,query}=m
-    setDestino(query); setDestinoCoords({lat,lng}); setDireccionDestinoConfirmada(`${nombre} - ${query}`)
-    leafletMap.current?.setView([lat,lng], 15); markerDestinoRef.current?.setLatLng([lat,lng]); guardarDestinoFrecuente(query, lat,lng); hablar(`${nombre} seleccionado como destino`)
-    try{ const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16`); const j = await r.json(); if(j?.display_name){ setDireccionDestinoConfirmada(j.display_name); setDestino(j.display_name) } }catch{}
+    setDestino(query); setDestinoCoords({lat,lng}); setDireccionDestinoConfirmada(`${nombre} - Centro Real`)
+    leafletMap.current?.setView([lat,lng], 16); markerDestinoRef.current?.setLatLng([lat,lng]); guardarDestinoFrecuente(query, lat,lng); hablar(`${nombre} seleccionado, centro real`)
+    if(origenCoords) trazarRutaReal(origenCoords, {lat,lng})
+    try{ 
+      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16&accept-language=es`); 
+      const j = await r.json(); 
+      if(j?.display_name){ 
+        setDireccionDestinoConfirmada(j.display_name); setDestino(j.display_name); 
+        const corto = j.display_name.split(',').slice(0,2).join(', '); hablar(`Destino ${nombre}, ${corto}`)
+      } 
+    }catch{}
   }
 
   useEffect(() => {
