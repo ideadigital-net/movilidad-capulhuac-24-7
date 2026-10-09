@@ -37,13 +37,23 @@ export default function AppPage() {
   const RADIO_KM = 30 // solo para aprender frecuentes, NO para precio - precio sin límite: 5km=base+12=52
   const hablar = (t:string)=>{ try{ const u=new SpeechSynthesisUtterance(t); u.lang='es-MX'; u.rate=0.95; speechSynthesis.cancel(); speechSynthesis.speak(u)}catch{} }
 
+  // CENTROS REALES - ZOCALO NO ORILLA - Cuando escriban solo nombre poblacion, mandar al centro
   const MUNICIPIOS_CENTRO = [
+    { nombre: "Capulhuac Centro", query: "Zocalo de Capulhuac", lat:19.2007,lng:-99.4672 },
+    { nombre: "San Antonio la Isla", query: "Centro de San Antonio la Isla", lat:19.1635,lng:-99.5555 }, // FIX orilla -> centro real
+    { nombre: "Almoloya del Rio", query: "Centro de Almoloya del Rio", lat:19.1590,lng:-99.4910 },
+    { nombre: "Atizapan Santa Cruz", query: "Centro de Atizapan Santa Cruz", lat:19.1910,lng:-99.4970 },
+    { nombre: "Tianguistenco Centro", query: "Centro de Tianguistenco", lat:19.1815,lng:-99.4658 },
     { nombre: "Ocoyoacac Centro", query: "Plaza de Ocoyoacac", lat:19.2739,lng:-99.4585 },
     { nombre: "Toluca Centro", query: "Plaza de Toluca", lat:19.2920,lng:-99.6565 },
-    { nombre: "Capulhuac Centro", query: "Zocalo de Capulhuac", lat:19.2007,lng:-99.4672 },
-    { nombre: "Tianguistenco Centro", query: "Centro de Tianguistenco", lat:19.1815,lng:-99.4658 },
     { nombre: "Lerma Centro", query: "Lerma de Villada Centro", lat:19.2868,lng:-99.5115 },
     { nombre: "Metepec Centro", query: "Metepec Centro", lat:19.2578,lng:-99.6062 },
+    { nombre: "Xalatlaco Centro", query: "Centro de Xalatlaco", lat:19.1840,lng:-99.4190 },
+    { nombre: "Rayon Centro", query: "Centro de Rayon", lat:19.1450,lng:-99.5750 },
+    { nombre: "Calimaya Centro", query: "Centro de Calimaya", lat:19.1610,lng:-99.6180 },
+    { nombre: "Mexicaltzingo", query: "Centro de Mexicaltzingo", lat:19.2100,lng:-99.5820 },
+    { nombre: "Chapultepec", query: "Centro de Chapultepec", lat:19.2000,lng:-99.5650 },
+    { nombre: "San Felipe Tlalmimilolpan", query: "San Felipe Tlalmimilolpan", lat:19.2430,lng:-99.6900 },
   ]
 
   const distanciaKm = (lat1:number,lng1:number,lat2:number,lng2:number)=>{
@@ -163,10 +173,18 @@ export default function AppPage() {
     if(!texto || texto.length<3) return
     setBuscandoDireccion(true)
     try{
-      const lower = texto.toLowerCase()
+      const lower = texto.toLowerCase().trim()
+      // FIX: Si escriben solo nombre poblacion (ej: San Antonio la Isla), mandar al centro real no orilla
       if(tipo==='destino'){
-        const match = MUNICIPIOS_CENTRO.find(m=> lower.includes(m.nombre.toLowerCase().split(' ')[0].toLowerCase()))
-        if(match && lower.length<25){ centrarEnMunicipioDirecto(match); setBuscandoDireccion(false); return }
+        const matchExacto = MUNICIPIOS_CENTRO.find(m=> {
+          const nombreLower = m.nombre.toLowerCase()
+          const queryLower = m.query.toLowerCase()
+          return lower === nombreLower || lower === queryLower || lower.includes(nombreLower.split(' ')[0].toLowerCase() + ' la isla') || lower === 'san antonio la isla' || lower === 'san antonio' || nombreLower.includes(lower) || lower.includes(nombreLower)
+        })
+        if(matchExacto){ centrarEnMunicipioDirecto(matchExacto); setBuscandoDireccion(false); return }
+        // Buscar por palabra clave
+        const matchParcial = MUNICIPIOS_CENTRO.find(m=> lower.includes(m.nombre.toLowerCase().split(' ')[0].toLowerCase()))
+        if(matchParcial && lower.length<25){ centrarEnMunicipioDirecto(matchParcial); setBuscandoDireccion(false); return }
       }
       const viewbox = '-100.2,19.6,-99.1,18.9'
       const queries = [`${texto}, Capulhuac, Estado de Mexico, Mexico`, `${texto}, Santiago Tianguistenco, Mexico`, `${texto}, Estado de Mexico, Mexico`, texto]
