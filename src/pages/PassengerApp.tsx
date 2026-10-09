@@ -205,16 +205,27 @@ export default function AppPage() {
       if(leafletMap.current){
         if(step===1 && origenCoords){
           if(markerDestinoRef.current && leafletMap.current.hasLayer(markerDestinoRef.current)) leafletMap.current.removeLayer(markerDestinoRef.current)
-          if(polylineRef.current) leafletMap.current.removeLayer(polylineRef.current)
+          // FIX: no borrar polyline aquí, mantener si existe
           if(!leafletMap.current.hasLayer(markerOrigenRef.current)) markerOrigenRef.current.addTo(leafletMap.current)
           markerOrigenRef.current.setLatLng([origenCoords.lat, origenCoords.lng]); leafletMap.current.setView([origenCoords.lat, origenCoords.lng], 16)
+          if(markerOrigenRef.current.bringToFront) markerOrigenRef.current.bringToFront()
         }
-        if(step>=2){
+        if(step===2){
           const centerDest = destinoCoords || BASE_CAPULHUAC
-          if(markerOrigenRef.current && leafletMap.current.hasLayer(markerOrigenRef.current)) leafletMap.current.removeLayer(markerOrigenRef.current)
           if(!leafletMap.current.hasLayer(markerDestinoRef.current)) markerDestinoRef.current.addTo(leafletMap.current)
           markerDestinoRef.current.setLatLng([centerDest.lat, centerDest.lng])
+          if(markerDestinoRef.current.bringToFront) markerDestinoRef.current.bringToFront()
           if(!destinoCoords) leafletMap.current.setView([centerDest.lat, centerDest.lng], 16)
+          else if(origenCoords) { /* mantener ruta visible */ }
+        }
+        if(step>=3){ // DETALLES y PRECIO: mostrar AMBOS pines + ruta amarilla fija
+          if(origenCoords && !leafletMap.current.hasLayer(markerOrigenRef.current)) markerOrigenRef.current.addTo(leafletMap.current)
+          if(destinoCoords && !leafletMap.current.hasLayer(markerDestinoRef.current)) markerDestinoRef.current.addTo(leafletMap.current)
+          if(origenCoords) markerOrigenRef.current?.setLatLng([origenCoords.lat, origenCoords.lng])
+          if(destinoCoords) markerDestinoRef.current?.setLatLng([destinoCoords.lat, destinoCoords.lng])
+          if(markerOrigenRef.current?.bringToFront) markerOrigenRef.current.bringToFront()
+          if(markerDestinoRef.current?.bringToFront) markerDestinoRef.current.bringToFront()
+          if(polylineRef.current) leafletMap.current.fitBounds(polylineRef.current.getBounds(), { padding:[80,80] })
         }
       }
     }
@@ -223,6 +234,12 @@ export default function AppPage() {
 
   useEffect(()=>{ setTimeout(()=>{ leafletMap.current?.invalidateSize() }, 350) }, [sheetMode, step])
 
+  const asegurarOrigenUsuario = ()=>{
+    if(!origenCoords || (Math.abs(origenCoords.lat - BASE_CAPULHUAC.lat)<0.0001 && Math.abs(origenCoords.lng - BASE_CAPULHUAC.lng)<0.0001)){
+      console.log('Origen es centro por defecto, solicitando GPS usuario')
+      usarMiUbicacionOrigen()
+    }
+  }
   const usarMiUbicacionOrigen = ()=>{
     if(!navigator.geolocation){ alert('Tu navegador no soporta GPS'); return }
     setBuscandoGPS(true)
