@@ -40,7 +40,7 @@ export default function AppPage() {
   // CENTROS REALES - ZOCALO NO ORILLA - Cuando escriban solo nombre poblacion, mandar al centro
   const MUNICIPIOS_CENTRO = [
     { nombre: "Capulhuac Centro", query: "Zocalo de Capulhuac", lat:19.2007,lng:-99.4672 },
-    { nombre: "San Antonio la Isla", query: "Centro de San Antonio la Isla", lat:19.1667,lng:-99.5650 }, // FIX orilla -> palacio municipal centro real 19.1667,-99.5650
+    { nombre: "San Antonio la Isla", query: "Centro de San Antonio la Isla", lat:19.1605,lng:-99.5612 }, // FIX orilla -> palacio municipal centro real 19.1605,-99.5612
     { nombre: "Almoloya del Rio", query: "Centro de Almoloya del Rio", lat:19.1590,lng:-99.4910 },
     { nombre: "Atizapan Santa Cruz", query: "Centro de Atizapan Santa Cruz", lat:19.1910,lng:-99.4970 },
     { nombre: "Tianguistenco Centro", query: "Centro de Tianguistenco", lat:19.1815,lng:-99.4658 },
@@ -52,7 +52,7 @@ export default function AppPage() {
     { nombre: "Rayon Centro", query: "Centro de Rayon", lat:19.1450,lng:-99.5750 },
     { nombre: "Calimaya Centro", query: "Centro de Calimaya", lat:19.1610,lng:-99.6180 },
     { nombre: "Mexicaltzingo", query: "Centro de Mexicaltzingo", lat:19.2100,lng:-99.5820 },
-    { nombre: "Chapultepec", query: "Centro de Chapultepec", lat:19.2000,lng:-99.5650 },
+    { nombre: "Chapultepec", query: "Centro de Chapultepec", lat:19.2000,lng:-99.5612 },
     { nombre: "San Felipe Tlalmimilolpan", query: "San Felipe Tlalmimilolpan", lat:19.2430,lng:-99.6900 },
   ]
 
