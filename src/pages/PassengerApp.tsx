@@ -202,6 +202,11 @@ export default function AppPage() {
         const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=5&countrycodes=mx&viewbox=${viewbox}&bounded=0&addressdetails=1`
         const r = await fetch(url); const j = await r.json()
         if(j && j.length>0){
+          // FORCE: si el query original es San Antonio la Isla, ignorar Nominatim y usar centro real SIEMPRE
+          if(texto.toLowerCase().includes('san antonio la isla') || texto.toLowerCase().includes('san antonio')){
+            const m = MUNICIPIOS_CENTRO.find(x=> x.nombre.toLowerCase().includes('san antonio la isla'))
+            if(m){ centrarEnMunicipioDirecto(m); setBuscandoDireccion(false); return }
+          }
           let mejor = j[0]
           let dentroRango = false
           for(let cand of j){ const d = distanciaKm(BASE_CAPULHUAC.lat, BASE_CAPULHUAC.lng, parseFloat(cand.lat), parseFloat(cand.lon)); if(d <= (tarifaConfig.rango_base_km||RADIO_KM)){ mejor = cand; dentroRango=true; break } }
