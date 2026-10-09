@@ -6,10 +6,15 @@ type RutaTarifa = { id?:string; origen:string; destino:string; precio:number; mi
 
 export default function AdminTarifasPanel(){
   const [config, setConfig] = useState({
-    tarifa_base: 40, // TU REGLA: 40 pesos 4km
+    tarifa_base: 40,
     km_gratis: 4,
     por_km: 12,
     por_min: 3.5,
+    por_min_espera: 1,
+    tolerancia_local_min: 10,
+    tolerancia_larga_min: 60,
+    km_tolerancia_larga: 15,
+    descuento_redondo_pct: 50,
     minimo: 40,
     comision_plataforma: 15,
     iva: 16,
@@ -35,22 +40,31 @@ export default function AdminTarifasPanel(){
     })()
   },[])
 
-  const calcularPrecioDinamico = (km:number)=>{
-    if(km <= config.km_gratis) return config.tarifa_base
-    return config.tarifa_base + (km - config.km_gratis) * config.por_km
+  const calcularPrecioDinamico = (km:number, esRedondo:boolean=false)=>{
+    let base = 0
+    if(km <= config.km_gratis) base = config.tarifa_base
+    else base = config.tarifa_base + (km - config.km_gratis) * config.por_km
+    if(esRedondo){ base = base * (1 + (100 - (config.descuento_redondo_pct||50))/100) } // ida y vuelta: 50% menos en regreso => 1.5x
+    return base
+  }
+  const calcularEspera = (km:number, minutosEspera:number)=>{
+    const tol = km > (config.km_tolerancia_larga||15) ? (config.tolerancia_larga_min||60) : (config.tolerancia_local_min||10)
+    if(minutosEspera <= tol) return 0
+    return (minutosEspera - tol) * (config.por_min_espera||1)
   }
 
   const guardarEnFirebase = async ()=>{
     setGuardando(true)
     try{
-      localStorage.setItem('tariff_config_capulhuac', JSON.stringify(config))
+      // Guardar config general
       await supabase.from('tariff_config').insert([{ config, created_at: new Date().toISOString() }])
+      // Guardar rutas (upsert)
       for(let r of rutas){
         if(r.destino){
           await supabase.from('route_tariffs').upsert({ origen:r.origen, destino:r.destino, precio:r.precio, minutos:r.minutos, tipo:r.tipo }, { onConflict:'origen,destino' })
         }
       }
-      alert(`✅ Guardado! Base $${config.tarifa_base} + $${config.por_km}/km. Ahora ve a /app y recarga para ver $${config.tarifa_base} MXN`)
+      alert('✅ Configuración guardada en Supabase (Firebase-style)')
     }catch(e:any){ alert('Error: '+e.message) } finally{ setGuardando(false) }
   }
 
@@ -75,7 +89,7 @@ export default function AdminTarifasPanel(){
               <div><label className="text-[10px] text-zinc-400">$ por Min</label><input type="number" value={config.por_min} onChange={e=>setConfig({...config, por_min: parseFloat(e.target.value)||0})} className="mt-1 w-full bg-black border border-zinc-700 rounded-xl px-3 py-2.5 text-[13px]" /></div>
             </div>
             <div><label className="text-[10px] text-zinc-400">KM Gratis incluidos</label><input type="number" value={config.km_gratis} onChange={e=>setConfig({...config, km_gratis: parseFloat(e.target.value)||0})} className="mt-1 w-full bg-black border border-zinc-700 rounded-xl px-3 py-2.5 text-[13px]" /></div>
-            <div><label className="text-[10px] text-zinc-400">Mínimo</label><input type="number" value={config.minimo} onChange={e=>setConfig({...config, minimo: parseFloat(e.target.value)||0})} className="mt-1 w-full bg-black border border-zinc-700 rounded-xl px-3 py-2.5 text-[13px]" /></div>
+            <div className="grid grid-cols-2 gap-3"><div><label className="text-[10px] text-zinc-400">$ por Min Espera</label><input type="number" value={config.por_min_espera} onChange={e=>setConfig({...config, por_min_espera: parseFloat(e.target.value)||0})} className="mt-1 w-full bg-black border border-zinc-700 rounded-xl px-3 py-2.5 text-[13px]" /></div><div><label className="text-[10px] text-zinc-400">Mínimo</label><input type="number" value={config.minimo} onChange={e=>setConfig({...config, minimo: parseFloat(e.target.value)||0})} className="mt-1 w-full bg-black border border-zinc-700 rounded-xl px-3 py-2.5 text-[13px]" /></div></div><div className="grid grid-cols-3 gap-2"><div><label className="text-[10px] text-zinc-400">Tolerancia Local min</label><input type="number" value={config.tolerancia_local_min} onChange={e=>setConfig({...config, tolerancia_local_min: parseFloat(e.target.value)||0})} className="mt-1 w-full bg-black border border-zinc-700 rounded-xl px-3 py-2.5 text-[11px]" /></div><div><label className="text-[10px] text-zinc-400">Tolerancia Larga min</label><input type="number" value={config.tolerancia_larga_min} onChange={e=>setConfig({...config, tolerancia_larga_min: parseFloat(e.target.value)||0})} className="mt-1 w-full bg-black border border-zinc-700 rounded-xl px-3 py-2.5 text-[11px]" /></div><div><label className="text-[10px] text-zinc-400">KM p/ Larga</label><input type="number" value={config.km_tolerancia_larga} onChange={e=>setConfig({...config, km_tolerancia_larga: parseFloat(e.target.value)||0})} className="mt-1 w-full bg-black border border-zinc-700 rounded-xl px-3 py-2.5 text-[11px]" /></div></div><div><label className="text-[10px] text-zinc-400">Descuento Redondo % (en regreso)</label><input type="number" value={config.descuento_redondo_pct} onChange={e=>setConfig({...config, descuento_redondo_pct: parseFloat(e.target.value)||0})} className="mt-1 w-full bg-black border border-zinc-700 rounded-xl px-3 py-2.5 text-[13px]" /><p className="text-[8px] text-zinc-500">Ej: 50% = paga 50% menos en vuelta (total 1.5×)</p></div>
             <div className="bg-zinc-900 rounded-xl p-3 text-[10px]"><p className="font-bold text-yellow-400">Regla actual:</p><p>{config.tarifa_base} MXN hasta {config.km_gratis}km desde centro Capulhuac, luego {config.por_km} $/km • Ej: 10km = ${calcularPrecioDinamico(10).toFixed(0)} MXN</p></div>
           </div>
         </div>

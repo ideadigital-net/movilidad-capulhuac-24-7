@@ -3,7 +3,7 @@ import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 
 type DestFrecuente = { texto:string; lat:number; lng:number; count:number; lastUsed:number }
-type TariffConfig = { tarifa_base:number; km_gratis:number; por_km:number; por_min:number; minimo:number; comision_plataforma:number; iva:number }
+type TariffConfig = { tarifa_base:number; km_gratis:number; por_km:number; por_min:number; minimo:number; comision_plataforma:number; iva:number; rango_base_km?:number; por_km_fuera_rango?:number }
 
 export default function AppPage() {
   const [step, setStep] = useState(0)
@@ -13,6 +13,8 @@ export default function AppPage() {
   const [destino, setDestino] = useState("")
   const [destinoCoords, setDestinoCoords] = useState<{lat:number,lng:number}|null>(null)
   const [detalles, setDetalles] = useState("")
+  const [tipoServicio, setTipoServicio] = useState<'normal'|'redondo'>('normal')
+  const [minutosEspera, setMinutosEspera] = useState(0)
   const [precioCalculado, setPrecioCalculado] = useState(25)
   const [distanciaKmReal, setDistanciaKmReal] = useState(0)
   const [duracionMin, setDuracionMin] = useState(0)
@@ -22,7 +24,7 @@ export default function AppPage() {
   const [direccionDestinoConfirmada, setDireccionDestinoConfirmada] = useState("")
   const [buscandoDireccion, setBuscandoDireccion] = useState(false)
   const [destinosFrecuentes, setDestinosFrecuentes] = useState<DestFrecuente[]>([])
-  const [tarifaConfig, setTarifaConfig] = useState<TariffConfig>({ tarifa_base:25, km_gratis:4, por_km:12, por_min:3.5, minimo:25, comision_plataforma:15, iva:16 })
+  const [tarifaConfig, setTarifaConfig] = useState<TariffConfig>({ tarifa_base:25, km_gratis:4, por_km:12, por_min:3.5, por_min_espera:1, tolerancia_local_min:10, tolerancia_larga_min:60, km_tolerancia_larga:15, descuento_redondo_pct:50, minimo:25, comision_plataforma:15, iva:16 })
   const [sheetMode, setSheetMode] = useState<'peek'|'half'|'full'>('half')
   const mapRef = useRef<HTMLDivElement>(null)
   const leafletMap = useRef<any>(null)
@@ -32,7 +34,7 @@ export default function AppPage() {
   const [userData] = useState({ nombre: "JORGE HERNANDEZ VALDIN", email: "valdin300499@gmail.com" })
 
   const BASE_CAPULHUAC = { lat:19.2007, lng:-99.4672 }
-  const RADIO_KM = 30
+  const RADIO_KM = 30 // solo para aprender frecuentes, NO para precio - precio sin límite: 5km=base+12=52
   const hablar = (t:string)=>{ try{ const u=new SpeechSynthesisUtterance(t); u.lang='es-MX'; u.rate=0.95; speechSynthesis.cancel(); speechSynthesis.speak(u)}catch{} }
 
   const MUNICIPIOS_CENTRO = [
@@ -72,13 +74,22 @@ export default function AppPage() {
     return ()=>{ document.removeEventListener('visibilitychange', onVis); clearInterval(interval) }
   }, [])
 
-  const calcularPrecio = (km:number)=>{
+  const calcularPrecio = (km:number, esRedondo:boolean=false)=>{
     let precio = 0
     if(km <= tarifaConfig.km_gratis) precio = tarifaConfig.tarifa_base
     else precio = tarifaConfig.tarifa_base + (km - tarifaConfig.km_gratis) * tarifaConfig.por_km
+    if(esRedondo){ const desc = tarifaConfig.descuento_redondo_pct || 50; precio = precio * (1 + (100-desc)/100) }
     const pisoReal = Math.min(tarifaConfig.tarifa_base, tarifaConfig.minimo)
     return Math.max(precio, pisoReal)
   }
+  const calcularEspera = (km:number, mins:number)=>{
+    const tolLarga = tarifaConfig.km_tolerancia_larga || 15
+    const tol = km > tolLarga ? (tarifaConfig.tolerancia_larga_min||60) : (tarifaConfig.tolerancia_local_min||10)
+    const porMin = tarifaConfig.por_min_espera || 1
+    if(mins <= tol) return 0
+    return (mins - tol) * porMin
+  }
+  const getTolerancia = (km:number)=>{ return km > (tarifaConfig.km_tolerancia_larga||15) ? (tarifaConfig.tolerancia_larga_min||60) : (tarifaConfig.tolerancia_local_min||10) }
 
   const trazarRutaReal = async (from:{lat:number,lng:number}, to:{lat:number,lng:number})=>{
     try{
@@ -119,7 +130,8 @@ export default function AppPage() {
 
   const guardarDestinoFrecuente = (texto:string, lat:number, lng:number)=>{
     const dist = distanciaKm(BASE_CAPULHUAC.lat, BASE_CAPULHUAC.lng, lat, lng)
-    if(dist > RADIO_KM) return
+    // Permitir guardar fuera de rango también, pero marcado
+    // if(dist > RADIO_KM) return // ya no bloqueamos, solo marcamos fuera de rango
     setDestinosFrecuentes(prev=>{
       const idx = prev.findIndex(d=> distanciaKm(d.lat,d.lng,lat,lng)<0.5)
       let nuevo:DestFrecuente[]
@@ -163,7 +175,9 @@ export default function AppPage() {
         const r = await fetch(url); const j = await r.json()
         if(j && j.length>0){
           let mejor = j[0]
-          for(let cand of j){ const d = distanciaKm(BASE_CAPULHUAC.lat, BASE_CAPULHUAC.lng, parseFloat(cand.lat), parseFloat(cand.lon)); if(d <= RADIO_KM){ mejor = cand; break } }
+          let dentroRango = false
+          for(let cand of j){ const d = distanciaKm(BASE_CAPULHUAC.lat, BASE_CAPULHUAC.lng, parseFloat(cand.lat), parseFloat(cand.lon)); if(d <= (tarifaConfig.rango_base_km||RADIO_KM)){ mejor = cand; dentroRango=true; break } }
+          // Si ninguno dentro de rango, usar el primero aunque esté fuera (se cobrará 12$/km)
           const lat=parseFloat(mejor.lat), lng=parseFloat(mejor.lon)
           const display = mejor.display_name
           const corto = display.split(',').slice(0,2).join(', ')
@@ -301,7 +315,7 @@ export default function AppPage() {
         {step===0 && (<><div className="flex justify-between items-center mb-3 mt-2"><h2 className="text-[18px] font-black">Tu perfil</h2><span className="text-[11px] bg-black text-white px-2.5 py-1 rounded-full">1 / 5</span></div><div className="bg-black text-white rounded-2xl p-3 flex items-center gap-3"><div className="w-12 h-12 rounded-full bg-[#0f3d2e] border-2 border-yellow-500 flex items-center justify-center">J</div><div className="flex-1"><div className="font-bold text-[14px]">{userData.nombre}</div><div className="text-[11px] text-zinc-400">{userData.email}</div><div className="text-[11px] text-yellow-400">✓ Verificado Google</div></div></div><div className="mt-4 rounded-[18px] border-2 border-black bg-white p-4"><p className="text-[10px] font-black tracking-[0.25em]">NÚMERO DEL CLIENTE</p><div className="mt-2 flex items-center gap-2"><span className="text-xl">📱</span><input value={telefonoCliente} onChange={(e)=>setTelefonoCliente(e.target.value)} style={{color:'#000'}} className="flex-1 bg-white text-black text-[18px] font-black outline-none" /><span className="bg-green-500 text-white text-[10px] px-2 py-1 rounded-full">✓ OK</span></div></div><button onClick={()=>setStep(1)} className="mt-4 w-full h-[56px] rounded-2xl bg-[#FFD60A] text-black font-black">Continuar → Origen</button></>)}
         {step===1 && (<><div className="flex justify-between items-center mb-3 mt-2"><h2 className="text-[20px] font-black">¿Dónde te recogemos?</h2><span className="text-[11px] bg-black text-white px-2.5 py-1 rounded-full">2 / 5</span></div><div className="rounded-[18px] border-2 border-blue-500 bg-white p-3 flex items-center gap-2"><div className="w-9 h-9 rounded-full bg-blue-500 flex items-center justify-center text-white shrink-0">📍</div><input value={origen} onChange={(e)=>setOrigen(e.target.value)} onBlur={(e)=>buscarDireccionInteligente(e.target.value,'origen')} onKeyDown={(e)=>{ if(e.key==='Enter') buscarDireccionInteligente(origen,'origen') }} placeholder="Ej: Av Niños Héroes 911, La Cruz" style={{color:'#000'}} className="flex-1 bg-white text-black text-[14px] font-bold outline-none" /></div><button onClick={usarMiUbicacionOrigen} disabled={buscandoGPS} className="mt-3 w-full h-[52px] rounded-2xl bg-blue-600 text-white font-black text-[14px]">{buscandoGPS?'📍 Buscando GPS...':'📍 Usar mi ubicación GPS actual'}</button>{buscandoDireccion && <p className="text-[11px] text-blue-600 mt-2 animate-pulse">🔍 Buscando en 30km...</p>}{direccionConfirmada && (<div className="mt-3 rounded-[14px] bg-blue-50 border p-3"><p className="text-[12px] font-bold text-blue-900">{direccionConfirmada}</p></div>)}<div className="mt-4 flex gap-3"><button onClick={()=>setStep(0)} className="flex-1 h-[56px] rounded-2xl bg-zinc-200 text-black font-bold">← Atrás</button><button onClick={()=>setStep(2)} className="flex-[1.5] h-[56px] rounded-2xl bg-black text-white font-black">Siguiente: Destino →</button></div></>)}
         {step===2 && (<><div className="flex justify-between items-center mb-3 mt-2"><h2 className="text-[20px] font-black">¿A dónde vas?</h2><span className="text-[11px] bg-black text-white px-2.5 py-1 rounded-full">3 / 5 • {RADIO_KM}km</span></div><div className="rounded-[18px] border-2 border-red-500 bg-white p-3 flex items-center gap-2"><div className="w-9 h-9 rounded-full bg-red-500 flex items-center justify-center text-white shrink-0">🔴</div><input value={destino} onChange={(e)=>setDestino(e.target.value)} onBlur={(e)=>buscarDireccionInteligente(e.target.value,'destino')} onKeyDown={(e)=>{ if(e.key==='Enter') buscarDireccionInteligente(destino,'destino') }} placeholder="Ej: Calle Benito Juarez, Capulhuac" style={{color:'#000'}} className="flex-1 bg-white text-black text-[14px] font-bold outline-none" /></div>{buscandoDireccion && <p className="text-[11px] text-red-600 mt-2 animate-pulse">🔍 Buscando en 30km...</p>}{distanciaKmReal>0 && (<div className="mt-3 rounded-[14px] bg-black text-white p-3 flex justify-between items-center"><div><p className="text-[11px] text-zinc-400">Distancia por carretera (OSRM)</p><p className="text-[16px] font-black">{distanciaKmReal.toFixed(1)} km • {duracionMin.toFixed(0)} min</p></div><div className="text-right"><p className="text-[11px] text-zinc-400">Precio estimado</p><p className="text-[18px] font-black text-yellow-400">${precioCalculado.toFixed(0)} MXN</p><p className="text-[9px] text-zinc-500">{tarifaConfig.tarifa_base} base {tarifaConfig.km_gratis}km + {tarifaConfig.por_km}$/km • Mín {tarifaConfig.minimo}</p></div></div>)}{destinosEnRadio.length>0 && (<><p className="text-[11px] font-black mt-3 mb-2">⭐ FRECUENTES:</p><div className="grid grid-cols-1 gap-2 max-h-[140px] overflow-y-auto">{destinosEnRadio.slice(0,5).map((d)=>(<button key={d.texto+d.lat} onClick={()=>{ setDestino(d.texto); setDestinoCoords({lat:d.lat,lng:d.lng}); hablar(`Destino frecuente ${d.texto.split(',')[0]} seleccionado`); }} className="rounded-xl bg-yellow-50 border border-yellow-300 p-3 flex items-center justify-between text-left"><div><p className="text-[12px] font-black text-black truncate w-[220px]">{d.texto.split(',').slice(0,2).join(',')}</p><p className="text-[9px] text-zinc-600">{d.count} viajes • {distanciaKm(BASE_CAPULHUAC.lat,BASE_CAPULHUAC.lng,d.lat,d.lng).toFixed(1)}km</p></div><span>⭐</span></button>))}</div></>) }<p className="text-[11px] font-black mt-3 mb-2">⚡ CENTROS (zócalo real no orilla):</p><div className="grid grid-cols-2 gap-2">{MUNICIPIOS_CENTRO.map((m)=>(<button key={m.nombre} onClick={()=>centrarEnMunicipioDirecto(m)} className="h-[44px] rounded-xl bg-zinc-900 text-white text-[11px] font-bold">📍 {m.nombre}</button>))}</div>{direccionDestinoConfirmada && (<div className="mt-3 rounded-[14px] bg-red-50 border border-red-200 p-3"><p className="text-[12px] font-bold text-red-900">{direccionDestinoConfirmada}</p></div>)}<div className="mt-4 flex gap-3"><button onClick={()=>setStep(1)} className="flex-1 h-[56px] rounded-2xl bg-zinc-200 text-black font-bold">← Atrás</button><button onClick={()=>setStep(3)} disabled={!destino} className="flex-[1.5] h-[56px] rounded-2xl bg-black text-white font-black disabled:opacity-30">Siguiente: Detalles →</button></div></>)}
-        {step===3 && (<><h2 className="text-[18px] font-black mt-2">Detalles</h2><textarea value={detalles} onChange={(e)=>setDetalles(e.target.value)} placeholder="Referencias, equipaje" style={{color:'#000'}} className="mt-3 w-full rounded-[14px] border-2 border-black p-4 bg-white text-black font-bold outline-none min-h-[60px]" /><div className="mt-3 bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-[11px]"><p className="font-black text-yellow-800">📋 LEYENDAS:</p><p>• Máximo 4 personas por unidad incluyendo niños</p><p>• Peajes/casetas se pagan directamente al conductor</p><p>• Tarifa: {tarifaConfig.tarifa_base} MXN base {tarifaConfig.km_gratis}km, luego {tarifaConfig.por_km}$/km por carretera</p></div><button onClick={()=>setStep(4)} className="mt-4 w-full h-[56px] rounded-2xl bg-[#FFD60A] text-black font-black">Siguiente → Precio</button></>)}
+        {step===3 && (<><h2 className="text-[18px] font-black mt-2">Detalles y tipo servicio</h2><div className="mt-3 grid grid-cols-2 gap-2"><button onClick={()=>setTipoServicio('normal')} className={`h-[48px] rounded-xl font-black text-[12px] ${tipoServicio==='normal' ? 'bg-black text-white' : 'bg-zinc-200 text-black'}`}>🚕 Normal</button><button onClick={()=>setTipoServicio('redondo')} className={`h-[48px] rounded-xl font-black text-[12px] ${tipoServicio==='redondo' ? 'bg-black text-white' : 'bg-zinc-200 text-black'}`}>🔄 Redondo ida y vuelta -{tarifaConfig.descuento_redondo_pct||50}% vuelta</button></div>{tipoServicio==='redondo' && <p className="text-[10px] text-blue-600 mt-2">Redondo: paga ida completa + vuelta con {tarifaConfig.descuento_redondo_pct||50}% descuento = { (1 + (100-(tarifaConfig.descuento_redondo_pct||50))/100).toFixed(1)}× precio base</p>}<textarea value={detalles} onChange={(e)=>setDetalles(e.target.value)} placeholder="Referencias, equipaje" style={{color:'#000'}} className="mt-3 w-full rounded-[14px] border-2 border-black p-4 bg-white text-black font-bold outline-none min-h-[60px]" /><div className="mt-3 bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-[11px] space-y-1"><p className="font-black text-yellow-800">📋 LEYENDAS:</p><p>• Máximo 4 personas por unidad incluyendo niños</p><p>• Peajes/casetas se pagan directamente al conductor</p><p>• Tarifa: {tarifaConfig.tarifa_base} MXN base {tarifaConfig.km_gratis}km, luego {tarifaConfig.por_km}$/km por carretera (sin límite)</p><p>• Espera: {tarifaConfig.por_min_espera}$/min • Local ≤{tarifaConfig.km_tolerancia_larga}km: {tarifaConfig.tolerancia_local_min}min gratis • Largo >{tarifaConfig.km_tolerancia_larga}km: {tarifaConfig.tolerancia_larga_min}min (1h) gratis</p>{tipoServicio==='redondo' && <p>• Redondo: {tarifaConfig.descuento_redondo_pct}% menos en regreso → Total {(1 + (100-(tarifaConfig.descuento_redondo_pct||50))/100).toFixed(1)}× base</p>}</div><button onClick={()=>setStep(4)} className="mt-4 w-full h-[56px] rounded-2xl bg-[#FFD60A] text-black font-black">Siguiente → Precio</button></>)}
         {step===4 && (<><h2 className="text-[18px] font-black mt-2">Precio y confirmar</h2><div className="mt-3 bg-black text-white rounded-2xl p-4"><p className="text-[14px] font-bold">{origen} → {destino}</p><p className="text-[12px] text-yellow-400 mt-1">📍 {distanciaKmReal.toFixed(1)} km por carretera (OSRM) • ⏱️ {duracionMin.toFixed(0)} min</p><p className="text-[20px] font-black mt-2">${precioCalculado.toFixed(0)} MXN</p><p className="text-[10px] text-zinc-400">Base {tarifaConfig.tarifa_base} hasta {tarifaConfig.km_gratis}km + {tarifaConfig.por_km}$/km • Mín ${Math.min(tarifaConfig.tarifa_base, tarifaConfig.minimo)}</p><div className="mt-3 border-t border-zinc-800 pt-2 text-[10px] text-zinc-400"><p>⚠️ Máximo 4 personas incluyendo niños</p><p>💰 Casetas se pagan directo al conductor</p></div></div><div className="mt-3 rounded-xl bg-zinc-100 p-3"><p className="text-[10px] font-bold">Ruta amarilla trazada por carretera - no línea recta</p><p className="text-[9px] text-zinc-600">Se ve en el mapa como línea amarilla de {distanciaKmReal.toFixed(1)}km - baja la pestaña para verla completa</p></div><button onClick={crearViajeReal} disabled={guardando} className="mt-4 w-full h-[56px] rounded-2xl bg-[#FFD60A] text-black font-black">{guardando ? 'Guardando...' : `Confirmar viaje $${precioCalculado.toFixed(0)} ✓`}</button></>)}
       </div>
     </div>
