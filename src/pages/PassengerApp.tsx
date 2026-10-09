@@ -65,13 +65,18 @@ export default function AppPage() {
   const cargarConfigTarifas = async ()=>{
     try{
       const local = localStorage.getItem('tariff_config_capulhuac')
-      if(local){ const cfg = JSON.parse(local); setTarifaConfig(cfg); }
-      const { data } = await supabase.from('tariff_config').select('*').order('created_at',{ascending:false}).limit(1)
-      if(data && data[0] && data[0].config){
-        setTarifaConfig(data[0].config)
-        localStorage.setItem('tariff_config_capulhuac', JSON.stringify(data[0].config))
-      }
-    }catch(e){ console.log('Error tarifas', e) }
+      if(local){ try{ const cfg = JSON.parse(local); setTarifaConfig(cfg); }catch{} }
+      // Intentar Supabase solo si existe y sin spam de errores
+      try{
+        if(typeof supabase !== 'undefined' && supabase?.from){
+          const { data } = await supabase.from('tariff_config').select('*').order('created_at',{ascending:false}).limit(1)
+          if(data && data[0] && data[0].config){
+            setTarifaConfig(data[0].config)
+            localStorage.setItem('tariff_config_capulhuac', JSON.stringify(data[0].config))
+          }
+        }
+      }catch(e){ /* Silenciar ERR_NAME_NOT_RESOLVED, usar localStorage */ }
+    }catch(e){ /* fallback local */ }
   }
 
   useEffect(() => {
@@ -174,11 +179,13 @@ export default function AppPage() {
     setBuscandoDireccion(true)
     try{
       const lower = texto.toLowerCase().trim()
-      // FIX ORILLA: Si texto contiene nombre poblacion, SIEMPRE mandar al centro real zocalo, no a orilla Nominatim
+      // FIX DEFINITIVO ORILLA: San Antonio la Isla SIEMPRE al centro real, no a Rancho San Dimas
+      if(tipo==='destino' && (lower.includes('san antonio la isla') || lower.includes('san antonio')) ){
+        const m = MUNICIPIOS_CENTRO.find(x=> x.nombre.toLowerCase().includes('san antonio la isla'))
+        if(m){ console.log('✅ FORZANDO CENTRO REAL San Antonio la Isla', m.lat, m.lng, '- NO orilla Rancho San Dimas'); centrarEnMunicipioDirecto(m); setBuscandoDireccion(false); return }
+      }
       if(tipo==='destino'){
-        // Normalizar: quitar estado, mexico, comas
         const normalizado = lower.replace(/,.*estado.*|mexico|méxico|\d{5}/gi,'').trim()
-        // Prioridad 1: match exacto San Antonio la Isla
         if(normalizado.includes('san antonio la isla') || normalizado.includes('san antonio') || normalizado === 'san antonio la isla'){
           const m = MUNICIPIOS_CENTRO.find(x=> x.nombre.toLowerCase().includes('san antonio la isla'))
           if(m){ console.log('FORZANDO CENTRO REAL San Antonio la Isla', m.lat, m.lng); centrarEnMunicipioDirecto(m); setBuscandoDireccion(false); return }
