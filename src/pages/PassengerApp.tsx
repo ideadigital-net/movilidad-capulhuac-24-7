@@ -40,7 +40,7 @@ export default function AppPage() {
   // CENTROS REALES - ZOCALO NO ORILLA - Cuando escriban solo nombre poblacion, mandar al centro
   const MUNICIPIOS_CENTRO = [
     { nombre: "Capulhuac Centro", query: "Zocalo de Capulhuac", lat:19.2007,lng:-99.4672 },
-    { nombre: "San Antonio la Isla", query: "Centro de San Antonio la Isla", lat:19.1635,lng:-99.5555 }, // FIX orilla -> centro real
+    { nombre: "San Antonio la Isla", query: "Centro de San Antonio la Isla", lat:19.1667,lng:-99.5650 }, // FIX orilla -> palacio municipal centro real 19.1667,-99.5650
     { nombre: "Almoloya del Rio", query: "Centro de Almoloya del Rio", lat:19.1590,lng:-99.4910 },
     { nombre: "Atizapan Santa Cruz", query: "Centro de Atizapan Santa Cruz", lat:19.1910,lng:-99.4970 },
     { nombre: "Tianguistenco Centro", query: "Centro de Tianguistenco", lat:19.1815,lng:-99.4658 },
@@ -174,17 +174,27 @@ export default function AppPage() {
     setBuscandoDireccion(true)
     try{
       const lower = texto.toLowerCase().trim()
-      // FIX: Si escriben solo nombre poblacion (ej: San Antonio la Isla), mandar al centro real no orilla
+      // FIX ORILLA: Si texto contiene nombre poblacion, SIEMPRE mandar al centro real zocalo, no a orilla Nominatim
       if(tipo==='destino'){
-        const matchExacto = MUNICIPIOS_CENTRO.find(m=> {
-          const nombreLower = m.nombre.toLowerCase()
-          const queryLower = m.query.toLowerCase()
-          return lower === nombreLower || lower === queryLower || lower.includes(nombreLower.split(' ')[0].toLowerCase() + ' la isla') || lower === 'san antonio la isla' || lower === 'san antonio' || nombreLower.includes(lower) || lower.includes(nombreLower)
-        })
-        if(matchExacto){ centrarEnMunicipioDirecto(matchExacto); setBuscandoDireccion(false); return }
-        // Buscar por palabra clave
+        // Normalizar: quitar estado, mexico, comas
+        const normalizado = lower.replace(/,.*estado.*|mexico|méxico|\d{5}/gi,'').trim()
+        // Prioridad 1: match exacto San Antonio la Isla
+        if(normalizado.includes('san antonio la isla') || normalizado.includes('san antonio') || normalizado === 'san antonio la isla'){
+          const m = MUNICIPIOS_CENTRO.find(x=> x.nombre.toLowerCase().includes('san antonio la isla'))
+          if(m){ console.log('FORZANDO CENTRO REAL San Antonio la Isla', m.lat, m.lng); centrarEnMunicipioDirecto(m); setBuscandoDireccion(false); return }
+        }
+        // Prioridad 2: cualquier centro por nombre
+        for(let m of MUNICIPIOS_CENTRO){
+          const palabras = m.nombre.toLowerCase().split(' ')
+          const primera = palabras[0]
+          const nombreSinCentro = m.nombre.toLowerCase().replace(' centro','').trim()
+          if(normalizado === nombreSinCentro || normalizado.includes(nombreSinCentro) || (normalizado.includes(primera) && m.nombre.toLowerCase().includes('san antonio')) ){
+            centrarEnMunicipioDirecto(m); setBuscandoDireccion(false); return
+          }
+        }
+        // Prioridad 3: match parcial antiguo
         const matchParcial = MUNICIPIOS_CENTRO.find(m=> lower.includes(m.nombre.toLowerCase().split(' ')[0].toLowerCase()))
-        if(matchParcial && lower.length<25){ centrarEnMunicipioDirecto(matchParcial); setBuscandoDireccion(false); return }
+        if(matchParcial && lower.length<30){ centrarEnMunicipioDirecto(matchParcial); setBuscandoDireccion(false); return }
       }
       const viewbox = '-100.2,19.6,-99.1,18.9'
       const queries = [`${texto}, Capulhuac, Estado de Mexico, Mexico`, `${texto}, Santiago Tianguistenco, Mexico`, `${texto}, Estado de Mexico, Mexico`, texto]
@@ -210,9 +220,12 @@ export default function AppPage() {
 
   const centrarEnMunicipioDirecto = async (m:any)=>{
     const {lat,lng,nombre,query}=m
-    setDestino(query); setDestinoCoords({lat,lng}); setDireccionDestinoConfirmada(`${nombre} - Centro Real`)
-    leafletMap.current?.setView([lat,lng], 16); markerDestinoRef.current?.setLatLng([lat,lng]); guardarDestinoFrecuente(query, lat,lng); hablar(`${nombre} seleccionado, centro real`)
-    try{ const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16&accept-language=es`); const j = await r.json(); if(j?.display_name){ setDireccionDestinoConfirmada(j.display_name); setDestino(j.display_name); const corto = j.display_name.split(',').slice(0,2).join(', '); hablar(`Destino ${nombre}, ${corto}`) } }catch{}
+    // FIX ORILLA: Guardar centro real directo, no esperar reverse que puede dar orilla
+    setDestinoCoords({lat,lng}); setDestino(`${nombre} - Centro Real`); setDireccionDestinoConfirmada(`${nombre} - Centro Real (${lat.toFixed(4)}, ${lng.toFixed(4)})`)
+    leafletMap.current?.setView([lat,lng], 16); markerDestinoRef.current?.setLatLng([lat,lng]); guardarDestinoFrecuente(query, lat,lng); hablar(`${nombre} centro real seleccionado`)
+    if(origenCoords) trazarRutaReal(origenCoords, {lat,lng})
+    // Reverse solo para voz corta, pero NO sobrescribir destino con orilla
+    try{ const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16&accept-language=es`); const j = await r.json(); if(j?.display_name){ const corto = j.display_name.split(',').slice(0,2).join(', '); setDireccionDestinoConfirmada(`${nombre} - ${corto}`); hablar(`${nombre}, ${corto}`) } }catch{}
   }
 
   useEffect(() => {
