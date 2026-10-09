@@ -1,13 +1,7 @@
+
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = 'https://ufkyppfzyggghrixikiaw.supabase.co'
-const supabaseKey = 'sb_publishable_IqR-YG1I7Etq9qdLOiXKxw_SrPhA73R'
+const supabaseUrl = 'https://lfhgtowhaamdpnsiuqwt.supabase.co'
+const supabaseAnonKey = 'sb_publishable_RIjZq-AO2U9EVKn6iJsHkg_Qr2Bt6jY'
 
-export const supabase = createClient(supabaseUrl, supabaseKey, {
-  auth: {
-    detectSessionInUrl: true,
-    persistSession: true,
-    autoRefreshToken: true,
-    flowType: 'pkce'
-  }
-})
+export const supabase = createClient(supabaseUrl, supabaseAnonKey)
