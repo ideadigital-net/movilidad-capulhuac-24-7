@@ -9,11 +9,11 @@ export default function AppPage() {
   const [step, setStep] = useState(0)
   const [telefonoCliente, setTelefonoCliente] = useState("7221417521")
   const [origen, setOrigen] = useState("Capulhuac")
-  const [origenCoords, setOrigenCoords] = useState<{lat:number,lng:number}|null>({lat:19.201,lng:-99.467})
+  const [origenCoords, setOrigenCoords] = useState<{lat:number,lng:number}|null>({lat:19.2007,lng:-99.4672})
   const [destino, setDestino] = useState("")
   const [destinoCoords, setDestinoCoords] = useState<{lat:number,lng:number}|null>(null)
   const [detalles, setDetalles] = useState("")
-  const [precioCalculado, setPrecioCalculado] = useState(20)
+  const [precioCalculado, setPrecioCalculado] = useState(15)
   const [distanciaKmReal, setDistanciaKmReal] = useState(0)
   const [duracionMin, setDuracionMin] = useState(0)
   const [guardando, setGuardando] = useState(false)
@@ -22,7 +22,7 @@ export default function AppPage() {
   const [direccionDestinoConfirmada, setDireccionDestinoConfirmada] = useState("")
   const [buscandoDireccion, setBuscandoDireccion] = useState(false)
   const [destinosFrecuentes, setDestinosFrecuentes] = useState<DestFrecuente[]>([])
-  const [tarifaConfig, setTarifaConfig] = useState<TariffConfig>({ tarifa_base:20, km_gratis:4, por_km:12, por_min:3.5, minimo:20, comision_plataforma:15, iva:16 })
+  const [tarifaConfig, setTarifaConfig] = useState<TariffConfig>({ tarifa_base:15, km_gratis:4, por_km:12, por_min:3.5, minimo:15, comision_plataforma:15, iva:16 })
   const [sheetMode, setSheetMode] = useState<'peek'|'half'|'full'>('half')
   const mapRef = useRef<HTMLDivElement>(null)
   const leafletMap = useRef<any>(null)
@@ -31,17 +31,18 @@ export default function AppPage() {
   const polylineRef = useRef<any>(null)
   const [userData] = useState({ nombre: "JORGE HERNANDEZ VALDIN", email: "valdin300499@gmail.com" })
 
-  const BASE_CAPULHUAC = { lat:19.201, lng:-99.467 }
+  const BASE_CAPULHUAC = { lat:19.2007, lng:-99.4672 }
   const RADIO_KM = 30
   const hablar = (t:string)=>{ try{ const u=new SpeechSynthesisUtterance(t); u.lang='es-MX'; u.rate=0.95; speechSynthesis.cancel(); speechSynthesis.speak(u)}catch{} }
 
+  // COORDENADAS CENTRO REAL - ZOCALO, NO ORILLA (FIX para Capulhuac Centro)
   const MUNICIPIOS_CENTRO = [
-    { nombre: "Ocoyoacac Centro", query: "Centro de Ocoyoacac", lat:19.2732,lng:-99.4595 },
-    { nombre: "Toluca Centro", query: "Centro de Toluca", lat:19.2826,lng:-99.6558 },
-    { nombre: "Capulhuac Centro", query: "Capulhuac", lat:19.201,lng:-99.467 },
-    { nombre: "Tianguistenco", query: "Tianguistenco", lat:19.1808,lng:-99.466 },
-    { nombre: "Lerma", query: "Lerma de Villada", lat:19.2866,lng:-99.511 },
-    { nombre: "Metepec", query: "Metepec", lat:19.257,lng:-99.606 },
+    { nombre: "Ocoyoacac Centro", query: "Plaza de Ocoyoacac", lat:19.2739,lng:-99.4585 },
+    { nombre: "Toluca Centro", query: "Plaza de Toluca", lat:19.2920,lng:-99.6565 },
+    { nombre: "Capulhuac Centro", query: "Zocalo de Capulhuac", lat:19.2007,lng:-99.4672 }, // FIX: era 19.201,-99.467 (orilla), ahora zocalo real
+    { nombre: "Tianguistenco Centro", query: "Centro de Tianguistenco", lat:19.1815,lng:-99.4658 },
+    { nombre: "Lerma Centro", query: "Lerma de Villada Centro", lat:19.2868,lng:-99.5115 },
+    { nombre: "Metepec Centro", query: "Metepec Centro", lat:19.2578,lng:-99.6062 },
   ]
 
   const distanciaKm = (lat1:number,lng1:number,lat2:number,lng2:number)=>{
@@ -52,24 +53,18 @@ export default function AppPage() {
 
   const cargarConfigTarifas = async ()=>{
     try{
-      // 1. localStorage primero (para que veas cambio inmediato tras guardar en /admin/tarifas)
       const local = localStorage.getItem('tariff_config_capulhuac')
-      if(local){ const cfg = JSON.parse(local); setTarifaConfig(cfg); console.log('Config local:', cfg) }
-      // 2. Supabase como fuente verdad
+      if(local){ const cfg = JSON.parse(local); setTarifaConfig(cfg); }
       const { data } = await supabase.from('tariff_config').select('*').order('created_at',{ascending:false}).limit(1)
       if(data && data[0] && data[0].config){
         setTarifaConfig(data[0].config)
         localStorage.setItem('tariff_config_capulhuac', JSON.stringify(data[0].config))
-        console.log('Config Supabase:', data[0].config)
       }
-    }catch(e){ console.log('Error cargando tarifas', e) }
+    }catch(e){ console.log('Error tarifas', e) }
   }
 
   useEffect(() => {
-    try {
-      const frec = localStorage.getItem('destinos_frecuentes_capulhuac')
-      if(frec){ setDestinosFrecuentes(JSON.parse(frec)) }
-    } catch {}
+    try { const frec = localStorage.getItem('destinos_frecuentes_capulhuac'); if(frec){ setDestinosFrecuentes(JSON.parse(frec)) } } catch {}
     if(!document.getElementById('leaflet-css')){ const l=document.createElement('link'); l.id='leaflet-css'; l.rel='stylesheet'; l.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(l) }
     cargarConfigTarifas()
     const onVis = ()=>{ if(document.visibilityState==='visible') cargarConfigTarifas() }
@@ -137,7 +132,7 @@ export default function AppPage() {
       const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&accept-language=es`)
       const j = await r.json(); const dir=j.display_name||`${lat.toFixed(5)}, ${lng.toFixed(5)}`
       const corto = dir.split(',').slice(0,2).join(', ')
-      setOrigen(dir); setDireccionConfirmada(dir); hablar(`Origen confirmado, ${corto}`)
+      setOrigen(dir); setDireccionConfirmada(dir); hablar(`Origen, ${corto}`)
     }catch{ setOrigen(`${lat.toFixed(5)}, ${lng.toFixed(5)}`) }
   }
   const reverseGeocodeDestino = async (lat:number,lng:number)=>{
@@ -145,7 +140,7 @@ export default function AppPage() {
       const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&accept-language=es`)
       const j = await r.json(); const dir=j.display_name||`${lat.toFixed(5)}, ${lng.toFixed(5)}`
       const corto = dir.split(',').slice(0,2).join(', ')
-      setDestino(dir); setDireccionDestinoConfirmada(dir); guardarDestinoFrecuente(dir, lat,lng); hablar(`Destino confirmado, ${corto}`)
+      setDestino(dir); setDireccionDestinoConfirmada(dir); guardarDestinoFrecuente(dir, lat,lng); hablar(`Destino, ${corto}`)
       if(origenCoords) trazarRutaReal(origenCoords, {lat,lng})
     }catch{ setDestino(`${lat.toFixed(5)}, ${lng.toFixed(5)}`) }
   }
@@ -170,7 +165,6 @@ export default function AppPage() {
         const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=5&countrycodes=mx&viewbox=${viewbox}&bounded=0&addressdetails=1`
         const r = await fetch(url); const j = await r.json()
         if(j && j.length>0){
-          // elegir el más cercano a Capulhuac dentro de 30km
           let mejor = j[0]
           for(let cand of j){ const d = distanciaKm(BASE_CAPULHUAC.lat, BASE_CAPULHUAC.lng, parseFloat(cand.lat), parseFloat(cand.lon)); if(d <= RADIO_KM){ mejor = cand; break } }
           const lat=parseFloat(mejor.lat), lng=parseFloat(mejor.lon)
@@ -222,9 +216,11 @@ export default function AppPage() {
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'© OpenStreetMap' }).addTo(leafletMap.current)
         const iconOrigen = L.divIcon({ html:'<div style="background:#FF3B30;width:34px;height:34px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:3px solid white;display:flex;align-items:center;justify-content:center"><span style="transform:rotate(45deg)">📍</span></div>', iconSize:[34,34], iconAnchor:[17,34] })
         markerOrigenRef.current = L.marker([center.lat, center.lng], { draggable:true, icon: iconOrigen }).addTo(leafletMap.current)
-        markerOrigenRef.current.on('dragend', async ()=>{ const p=markerOrigenRef.current.getLatLng(); if(step===0 || step===1){ setOrigenCoords({lat:p.lat,lng:p.lng}); await reverseGeocodeOrigen(p.lat,p.lng) } if(step===2){ setDestinoCoords({lat:p.lat,lng:p.lng}); await reverseGeocodeDestino(p.lat,p.lng) } })
+        // FIX: drag para ORIGEN y DESTINO separados
+        markerOrigenRef.current.on('dragend', async ()=>{ const p=markerOrigenRef.current.getLatLng(); if(step===0 || step===1){ setOrigenCoords({lat:p.lat,lng:p.lng}); await reverseGeocodeOrigen(p.lat,p.lng) } })
         const iconDestino = L.divIcon({ html:'<div style="background:#007AFF;width:34px;height:34px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:3px solid white;display:flex;align-items:center;justify-content:center"><span style="transform:rotate(45deg)">🔴</span></div>', iconSize:[34,34], iconAnchor:[17,34] })
         markerDestinoRef.current = L.marker([center.lat, center.lng], { draggable:true, icon: iconDestino })
+        markerDestinoRef.current.on('dragend', async ()=>{ const p=markerDestinoRef.current.getLatLng(); setDestinoCoords({lat:p.lat,lng:p.lng}); await reverseGeocodeDestino(p.lat,p.lng) })
         leafletMap.current.on('click', async (e:any)=>{ const {lat,lng}=e.latlng; if(step===1){ markerOrigenRef.current.setLatLng([lat,lng]); setOrigenCoords({lat,lng}); await reverseGeocodeOrigen(lat,lng) } if(step===2){ markerDestinoRef.current.setLatLng([lat,lng]); setDestinoCoords({lat,lng}); await reverseGeocodeDestino(lat,lng) } })
       }
       if(leafletMap.current){
@@ -235,15 +231,20 @@ export default function AppPage() {
           markerOrigenRef.current.setLatLng([origenCoords.lat, origenCoords.lng]); leafletMap.current.setView([origenCoords.lat, origenCoords.lng], 16)
         }
         if(step>=2){
-          const centerDest = destinoCoords || {lat:19.2732,lng:-99.4595}
+          const centerDest = destinoCoords || BASE_CAPULHUAC
           if(markerOrigenRef.current && leafletMap.current.hasLayer(markerOrigenRef.current)) leafletMap.current.removeLayer(markerOrigenRef.current)
           if(!leafletMap.current.hasLayer(markerDestinoRef.current)) markerDestinoRef.current.addTo(leafletMap.current)
           markerDestinoRef.current.setLatLng([centerDest.lat, centerDest.lng])
+          if(!destinoCoords) leafletMap.current.setView([centerDest.lat, centerDest.lng], 16)
         }
       }
     }
     initMap()
   }, [step])
+
+  useEffect(()=>{
+    setTimeout(()=>{ leafletMap.current?.invalidateSize() }, 350)
+  }, [sheetMode, step])
 
   const usarMiUbicacionOrigen = ()=>{
     if(!navigator.geolocation){ alert('Tu navegador no soporta GPS'); return }
@@ -256,9 +257,9 @@ export default function AppPage() {
     const onError = (err:any)=>{
       setBuscandoGPS(false)
       let msg = ''
-      if(err.code===1) msg = 'Permiso denegado. En Chrome: candado 🔒 al lado de localhost:5173 → Configuración de sitio → Ubicación → Permitir. Luego recarga.'
-      else if(err.code===2) msg = 'GPS no disponible. Mueve el pin rojo manualmente.'
-      else msg = 'Tiempo agotado. Intenta de nuevo o mueve el pin rojo.'
+      if(err.code===1) msg = 'Permiso denegado. Candado 🔒 → Ubicación → Permitir → recarga.'
+      else if(err.code===2) msg = 'GPS no disponible. Mueve el pin rojo.'
+      else msg = 'Tiempo agotado. Intenta de nuevo.'
       alert('GPS: '+msg)
     }
     navigator.geolocation.getCurrentPosition(onSuccess, onError, { enableHighAccuracy:true, timeout:15000, maximumAge:0 })
@@ -284,10 +285,6 @@ export default function AppPage() {
   const destinosEnRadio = destinosFrecuentes.filter(d=> distanciaKm(BASE_CAPULHUAC.lat,BASE_CAPULHUAC.lng,d.lat,d.lng)<=RADIO_KM)
   const sheetHeight = sheetMode==='peek' ? '28vh' : sheetMode==='half' ? '52vh' : '78vh'
 
-  useEffect(()=>{
-    setTimeout(()=>{ leafletMap.current?.invalidateSize() }, 350)
-  }, [sheetMode, step])
-
   return (
     <div className="h-[100dvh] w-full bg-black text-white flex flex-col overflow-hidden relative">
       <div className="bg-black px-3 py-2 flex items-center justify-between shrink-0">
@@ -301,30 +298,28 @@ export default function AppPage() {
       </div>
       <div className="flex-1 relative bg-[#c9d6de] overflow-hidden">
         <div ref={mapRef} className="absolute inset-0 w-full h-full" />
-        {/* Botón mapa centrar */}
         <button onClick={()=>{ if(sheetMode==='full') setSheetMode('half'); else setSheetMode('full') }} className="absolute top-3 right-3 z-[400] bg-white text-black text-[11px] font-bold px-3 py-1.5 rounded-full shadow-lg">
           {sheetMode==='full' ? '🗺️ Ver mapa' : sheetMode==='peek' ? '⬆️ Expandir' : '⬇️ Ver más mapa'}
         </button>
       </div>
-      {/* Bottom Sheet Retráctil */}
       <div style={{ height: sheetHeight }} className="bg-white text-black rounded-t-[1.8rem] p-4 pb-6 z-[500] overflow-y-auto transition-all duration-300 ease-out shadow-[0_-8px_30px_rgba(0,0,0,0.4)]">
         <div onClick={()=>{ setSheetMode(sheetMode==='full' ? 'half' : sheetMode==='half' ? 'peek' : 'half') }} className="w-full flex flex-col items-center cursor-pointer py-1">
           <div className="w-12 h-1.5 bg-zinc-300 rounded-full"></div>
           <p className="text-[9px] text-zinc-400 mt-1">{sheetMode==='peek' ? 'Toca para expandir' : sheetMode==='half' ? 'Desliza para ver más mapa' : 'Toca para bajar pestaña'}</p>
         </div>
 
-        {step===0 && (<><div className="flex justify-between items-center mb-3 mt-2"><h2 className="text-[18px] font-black">Tu perfil</h2><span className="text-[11px] bg-black text-white px-2.5 py-1 rounded-full">1 / 5</span></div><div className="bg-black text-white rounded-2xl p-3 flex items-center gap-3"><div className="w-12 h-12 rounded-full bg-[#0f3d2e] border-2 border-yellow-500 flex items-center justify-center">J</div><div className="flex-1"><div className="font-bold text-[14px]">{userData.nombre}</div><div className="text-[11px] text-zinc-400">{userData.email}</div><div className="text-[11px] text-yellow-400">✓ Verificado Google</div></div></div><div className="mt-4 rounded-[18px] border-2 border-black bg-white p-4"><p className="text-[10px] font-black tracking-[0.25em]">NÚMERO DEL CLIENTE</p><div className="mt-2 flex items-center gap-2"><span className="text-xl">📱</span><input value={telefonoCliente} onChange={(e)=>setTelefonoCliente(e.target.value)} style={{color:'#000'}} className="flex-1 bg-white text-black text-[18px] font-black outline-none" /><span className="bg-green-500 text-white text-[10px] px-2 py-1 rounded-full">✓ OK</span></div><p className="text-[9px] text-zinc-500 mt-1">Google verificado • Se usa para confirmar viaje</p></div><button onClick={()=>setStep(1)} className="mt-4 w-full h-[56px] rounded-2xl bg-[#FFD60A] text-black font-black">Continuar → Origen</button></>)}
+        {step===0 && (<><div className="flex justify-between items-center mb-3 mt-2"><h2 className="text-[18px] font-black">Tu perfil</h2><span className="text-[11px] bg-black text-white px-2.5 py-1 rounded-full">1 / 5</span></div><div className="bg-black text-white rounded-2xl p-3 flex items-center gap-3"><div className="w-12 h-12 rounded-full bg-[#0f3d2e] border-2 border-yellow-500 flex items-center justify-center">J</div><div className="flex-1"><div className="font-bold text-[14px]">{userData.nombre}</div><div className="text-[11px] text-zinc-400">{userData.email}</div><div className="text-[11px] text-yellow-400">✓ Verificado Google</div></div></div><div className="mt-4 rounded-[18px] border-2 border-black bg-white p-4"><p className="text-[10px] font-black tracking-[0.25em]">NÚMERO DEL CLIENTE</p><div className="mt-2 flex items-center gap-2"><span className="text-xl">📱</span><input value={telefonoCliente} onChange={(e)=>setTelefonoCliente(e.target.value)} style={{color:'#000'}} className="flex-1 bg-white text-black text-[18px] font-black outline-none" /><span className="bg-green-500 text-white text-[10px] px-2 py-1 rounded-full">✓ OK</span></div></div><button onClick={()=>setStep(1)} className="mt-4 w-full h-[56px] rounded-2xl bg-[#FFD60A] text-black font-black">Continuar → Origen</button></>)}
 
-        {step===1 && (<><div className="flex justify-between items-center mb-3 mt-2"><h2 className="text-[20px] font-black">¿Dónde te recogemos?</h2><span className="text-[11px] bg-black text-white px-2.5 py-1 rounded-full">2 / 5</span></div><div className="rounded-[14px] bg-amber-50 border border-amber-200 p-2.5 mb-2"><p className="text-[10px] font-bold text-amber-900">📋 Calle + Número, Colonia, Municipio, Estado</p></div><div className="rounded-[18px] border-2 border-blue-500 bg-white p-3 flex items-center gap-2"><div className="w-9 h-9 rounded-full bg-blue-500 flex items-center justify-center text-white shrink-0">📍</div><input value={origen} onChange={(e)=>setOrigen(e.target.value)} onBlur={(e)=>buscarDireccionInteligente(e.target.value,'origen')} onKeyDown={(e)=>{ if(e.key==='Enter') buscarDireccionInteligente(origen,'origen') }} placeholder="Ej: Av Niños Héroes 9, La Cruz" style={{color:'#000'}} className="flex-1 bg-white text-black text-[14px] font-bold outline-none" /></div><button onClick={usarMiUbicacionOrigen} disabled={buscandoGPS} className="mt-3 w-full h-[52px] rounded-2xl bg-blue-600 text-white font-black text-[14px]">{buscandoGPS?'📍 Buscando GPS...':'📍 Usar mi ubicación GPS actual'}</button><p className="text-[9px] text-zinc-500 mt-1">Si dice denegado: candado 🔒 en la barra → Ubicación → Permitir → recarga. Es normal en localhost.</p>{direccionConfirmada && (<div className="mt-3 rounded-[14px] bg-blue-50 border p-3"><p className="text-[12px] font-bold text-blue-900">{direccionConfirmada}</p></div>)}<div className="mt-4 flex gap-3"><button onClick={()=>setStep(0)} className="flex-1 h-[56px] rounded-2xl bg-zinc-200 text-black font-bold">← Atrás</button><button onClick={()=>setStep(2)} className="flex-[1.5] h-[56px] rounded-2xl bg-black text-white font-black">Siguiente: Destino →</button></div></>)}
+        {step===1 && (<><div className="flex justify-between items-center mb-3 mt-2"><h2 className="text-[20px] font-black">¿Dónde te recogemos?</h2><span className="text-[11px] bg-black text-white px-2.5 py-1 rounded-full">2 / 5</span></div><div className="rounded-[18px] border-2 border-blue-500 bg-white p-3 flex items-center gap-2"><div className="w-9 h-9 rounded-full bg-blue-500 flex items-center justify-center text-white shrink-0">📍</div><input value={origen} onChange={(e)=>setOrigen(e.target.value)} onBlur={(e)=>buscarDireccionInteligente(e.target.value,'origen')} onKeyDown={(e)=>{ if(e.key==='Enter') buscarDireccionInteligente(origen,'origen') }} placeholder="Ej: Av Niños Héroes 911, La Cruz" style={{color:'#000'}} className="flex-1 bg-white text-black text-[14px] font-bold outline-none" /></div><button onClick={usarMiUbicacionOrigen} disabled={buscandoGPS} className="mt-3 w-full h-[52px] rounded-2xl bg-blue-600 text-white font-black text-[14px]">{buscandoGPS?'📍 Buscando GPS...':'📍 Usar mi ubicación GPS actual'}</button>{buscandoDireccion && <p className="text-[11px] text-blue-600 mt-2 animate-pulse">🔍 Buscando en 30km...</p>}{direccionConfirmada && (<div className="mt-3 rounded-[14px] bg-blue-50 border p-3"><p className="text-[12px] font-bold text-blue-900">{direccionConfirmada}</p></div>)}<div className="mt-4 flex gap-3"><button onClick={()=>setStep(0)} className="flex-1 h-[56px] rounded-2xl bg-zinc-200 text-black font-bold">← Atrás</button><button onClick={()=>setStep(2)} className="flex-[1.5] h-[56px] rounded-2xl bg-black text-white font-black">Siguiente: Destino →</button></div></>)}
 
         {step===2 && (
           <>
             <div className="flex justify-between items-center mb-3 mt-2"><h2 className="text-[20px] font-black">¿A dónde vas?</h2><span className="text-[11px] bg-black text-white px-2.5 py-1 rounded-full">3 / 5 • {RADIO_KM}km</span></div>
             <div className="rounded-[18px] border-2 border-red-500 bg-white p-3 flex items-center gap-2">
               <div className="w-9 h-9 rounded-full bg-red-500 flex items-center justify-center text-white shrink-0">🔴</div>
-              <input value={destino} onChange={(e)=>setDestino(e.target.value)} onBlur={(e)=>buscarDireccionInteligente(e.target.value,'destino')} onKeyDown={(e)=>{ if(e.key==='Enter') buscarDireccionInteligente(destino,'destino') }} placeholder="Ej: Toluca Centro, Ocoyoacac" style={{color:'#000'}} className="flex-1 bg-white text-black text-[14px] font-bold outline-none" />
+              <input value={destino} onChange={(e)=>setDestino(e.target.value)} onBlur={(e)=>buscarDireccionInteligente(e.target.value,'destino')} onKeyDown={(e)=>{ if(e.key==='Enter') buscarDireccionInteligente(destino,'destino') }} placeholder="Ej: Calle Benito Juarez, Capulhuac" style={{color:'#000'}} className="flex-1 bg-white text-black text-[14px] font-bold outline-none" />
             </div>
-            {buscandoDireccion && <p className="text-[11px] text-red-600 mt-2 animate-pulse">🔍 Buscando en radio 30km...</p>}
+            {buscandoDireccion && <p className="text-[11px] text-red-600 mt-2 animate-pulse">🔍 Buscando en 30km...</p>}
 
             {distanciaKmReal>0 && (
               <div className="mt-3 rounded-[14px] bg-black text-white p-3 flex justify-between items-center">
@@ -346,7 +341,7 @@ export default function AppPage() {
               </>
             )}
 
-            <p className="text-[11px] font-black mt-3 mb-2">⚡ CENTROS (centro real, no orilla):</p>
+            <p className="text-[11px] font-black mt-3 mb-2">⚡ CENTROS (centro real, zócalo no orilla):</p>
             <div className="grid grid-cols-2 gap-2">
               {MUNICIPIOS_CENTRO.map((m)=>(
                 <button key={m.nombre} onClick={()=>centrarEnMunicipioDirecto(m)} className="h-[44px] rounded-xl bg-zinc-900 text-white text-[11px] font-bold">📍 {m.nombre}</button>
